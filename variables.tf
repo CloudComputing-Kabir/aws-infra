@@ -4,7 +4,7 @@ variable "region" {
 }
 
 variable "profile" {
-  default ="dev"
+  default = "dev"
 }
 
 variable "vpc_cidr" {
