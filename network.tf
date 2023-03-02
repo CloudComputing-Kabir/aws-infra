@@ -1,5 +1,6 @@
 resource "aws_vpc" "assignment_3_vpc" {
   cidr_block = var.vpc_cidr
+  enable_dns_hostnames = true
   tags = {
     Name = "my-vpc"
   }
@@ -57,17 +58,17 @@ resource "aws_security_group" "web_app_sg" {
       security_groups  = []
       self             = false
     },
-    {
-      description      = "MySQL"
-      from_port        = 3306
-      to_port          = 3306
-protocol         = "tcp"
-      cidr_blocks      = ["0.0.0.0/0"]
-      ipv6_cidr_blocks = []
-      prefix_list_ids  = []
-      security_groups  = []
-      self             = false
-    }
+    # {
+    #   description      = "MySQL"
+    #   from_port        = 3306
+    #   to_port          = 3306
+    #   protocol         = "tcp"
+    #   cidr_blocks      = ["0.0.0.0/0"]
+    #   ipv6_cidr_blocks = []
+    #   prefix_list_ids  = []
+    #   security_groups  = []
+    #   self             = false
+    # }
   ]
 
   egress {
@@ -84,4 +85,55 @@ protocol         = "tcp"
   tags = {
     Name = "Web app security group"
   }
+}
+
+#Security group for the RDS:
+
+resource "aws_security_group" "db_security_group" {
+  name_prefix = "db_security_group"
+  vpc_id      = aws_vpc.assignment_3_vpc.id
+  ingress {
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.web_app_sg.id]
+  }
+  #   egress {
+  #     from_port   = 0
+  #     to_port     = 0
+  #     protocol    = "-1"
+  #     cidr_blocks = ["0.0.0.0/0"]
+  #   }
+}
+
+#RDS Parameter group:
+
+resource "aws_db_parameter_group" "rds_parameter_group" {
+  name_prefix = "rds-parameter-group"
+  family      = var.rds_engine_family
+  description = "Custom Parameter Group for ${var.rds_engine}"
+  parameter {
+    name  = "character_set_client"
+    value = "utf8mb4"
+  }
+
+  parameter {
+    name  = "character_set_connection"
+    value = "utf8mb4"
+  }
+
+  parameter {
+    name  = "character_set_results"
+    value = "utf8mb4"
+  }
+
+  parameter {
+    name  = "character_set_server"
+    value = "utf8mb4"
+  }
+
+  tags = {
+    "Name" = "RDS PARAMETER TAG"
+  }
+
 }
