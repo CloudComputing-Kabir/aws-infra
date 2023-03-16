@@ -3,7 +3,7 @@ data "aws_ami" "ami" {
   most_recent = true
   filter {
     name   = "name"
-    values = ["webapp - 20230302081536"]
+    values = ["webapp - 20230316170624"]
   }
 }
 
@@ -180,3 +180,27 @@ resource "aws_iam_instance_profile" "webapppofile" {
   name = "webappprofile"
   role = aws_iam_role.webappS3Role.name
 }
+
+//Route53:
+data "aws_route53_zone" "selected" {
+  name         = "${var.profile}.shaikhkabir.com"
+  private_zone = false
+}
+
+resource "aws_route53_record" "route_54_www" {
+  zone_id = data.aws_route53_zone.selected.zone_id
+  name    = "${var.profile}.shaikhkabir.com"
+  type    = "A"
+  ttl     = "60"
+  records = [ aws_instance.web_app.public_ip ]
+}
+
+# resource "aws_eip" "webapp_eip" {
+#   instance = aws_instance.web_app.id
+#   vpc      = true
+# }
+
+# resource "aws_eip_association" "web_app_eip_assoc" {
+#   instance_id   = aws_instance.web_app.id
+#   allocation_id = aws_eip.web_app_eip.id
+# }
