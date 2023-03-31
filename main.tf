@@ -3,7 +3,7 @@ data "aws_ami" "ami" {
   most_recent = true
   filter {
     name   = "name"
-    values = ["webapp - 20230316170624"]
+    values = ["webapp - 20230331163804"]
   }
 }
 
@@ -181,6 +181,9 @@ resource "aws_iam_instance_profile" "webapppofile" {
   role = aws_iam_role.webappS3Role.name
 }
 
+
+
+
 //Route53:
 data "aws_route53_zone" "selected" {
   name         = "${var.profile}.shaikhkabir.com"
@@ -195,12 +198,24 @@ resource "aws_route53_record" "route_54_www" {
   records = [ aws_instance.web_app.public_ip ]
 }
 
-# resource "aws_eip" "webapp_eip" {
-#   instance = aws_instance.web_app.id
-#   vpc      = true
-# }
+//IAM role for cloudwatch:
+data "aws_iam_policy" "CloudWatchAgentServerPolicy" {
+  arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+}
 
-# resource "aws_eip_association" "web_app_eip_assoc" {
-#   instance_id   = aws_instance.web_app.id
-#   allocation_id = aws_eip.web_app_eip.id
-# }
+
+data "aws_iam_policy" "AmazonSSMManagedInstanceCore" {
+  arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+
+resource "aws_iam_policy_attachment" "CloudWatchAgentServerPolicy_Policy" {
+  name       = "policy-attachment-CloudWatch"
+  policy_arn = data.aws_iam_policy.CloudWatchAgentServerPolicy.arn
+  roles      = [aws_iam_role.webappS3Role.name]
+}
+resource "aws_iam_policy_attachment" "AmazonSSMManagedInstanceCore_Policy" {
+  name       = "policy-attachment-AmazonSSM"
+  policy_arn = data.aws_iam_policy.AmazonSSMManagedInstanceCore.arn
+  roles      = [aws_iam_role.webappS3Role.name]
+}
