@@ -1,39 +1,39 @@
 # Create EC2 instance
-data "aws_ami" "ami" {
-  most_recent = true
-  filter {
-    name   = "name"
-    values = ["webapp - 20230331163804"]
-  }
-}
+# data "aws_ami" "ami" {
+#   most_recent = true
+#   filter {
+#     name   = "name"
+#     values = var.ami
+#   }
+# }
 
-resource "aws_instance" "web_app" {
-  ami                         = data.aws_ami.ami.id
-  instance_type               = "t2.micro"
-  subnet_id                   = element(aws_subnet.subnet[*].id, 0)
-  vpc_security_group_ids      = [aws_security_group.web_app_sg.id]
-  associate_public_ip_address = true
-  iam_instance_profile        = aws_iam_instance_profile.webapppofile.name
-  root_block_device {
-    delete_on_termination = true
-    volume_size           = 50
-    volume_type           = "gp2"
-  }
+# resource "aws_instance" "web_app" {
+#   ami                         = data.aws_ami.ami.id
+#   instance_type               = "t2.micro"
+#   subnet_id                   = element(aws_subnet.subnet[*].id, 0)
+#   vpc_security_group_ids      = [aws_security_group.web_app_sg.id]
+#   associate_public_ip_address = true
+#   iam_instance_profile        = aws_iam_instance_profile.webapppofile.name
+#   root_block_device {
+#     delete_on_termination = true
+#     volume_size           = 50
+#     volume_type           = "gp2"
+#   }
 
-  user_data = <<-EOF
-  #!/bin/bash
-  echo DB_USERNAME='${aws_db_instance.rds_cloud_database.username}' >>  /home/ec2-user/webapp/.env
-  echo DB_DNAME='${aws_db_instance.rds_cloud_database.db_name}' >>  /home/ec2-user/webapp/.env
-  echo DB_PASSWORD='${aws_db_instance.rds_cloud_database.password}'>>  /home/ec2-user/webapp/.env
-  echo DB_HOSTNAME='${aws_db_instance.rds_cloud_database.address}'>>  /home/ec2-user/webapp/.env
-  echo S3_BUCKETNAME='${aws_s3_bucket.s3Bucket.bucket}'>>  /home/ec2-user/webapp/.env
-  echo S3_BUCKETREGION='${var.region}'>>  /home/ec2-user/webapp/.env
-EOF
+#   user_data = <<-EOF
+#   #!/bin/bash
+#   echo DB_USERNAME='${aws_db_instance.rds_cloud_database.username}' >>  /home/ec2-user/webapp/.env
+#   echo DB_DNAME='${aws_db_instance.rds_cloud_database.db_name}' >>  /home/ec2-user/webapp/.env
+#   echo DB_PASSWORD='${aws_db_instance.rds_cloud_database.password}'>>  /home/ec2-user/webapp/.env
+#   echo DB_HOSTNAME='${aws_db_instance.rds_cloud_database.address}'>>  /home/ec2-user/webapp/.env
+#   echo S3_BUCKETNAME='${aws_s3_bucket.s3Bucket.bucket}'>>  /home/ec2-user/webapp/.env
+#   echo S3_BUCKETREGION='${var.region}'>>  /home/ec2-user/webapp/.env
+# EOF
 
-  tags = {
-    Name = "Web app"
-  }
-}
+#   tags = {
+#     Name = "Web app"
+#   }
+# }
 
 #Create RDS Instance:
 resource "aws_db_instance" "rds_cloud_database" {
@@ -194,8 +194,11 @@ resource "aws_route53_record" "route_54_www" {
   zone_id = data.aws_route53_zone.selected.zone_id
   name    = "${var.profile}.shaikhkabir.com"
   type    = "A"
-  ttl     = "60"
-  records = [ aws_instance.web_app.public_ip ]
+  alias {
+    name                   = aws_lb.lb.dns_name
+    zone_id                = aws_lb.lb.zone_id
+    evaluate_target_health = true
+  }
 }
 
 //IAM role for cloudwatch:
@@ -218,4 +221,177 @@ resource "aws_iam_policy_attachment" "AmazonSSMManagedInstanceCore_Policy" {
   name       = "policy-attachment-AmazonSSM"
   policy_arn = data.aws_iam_policy.AmazonSSMManagedInstanceCore.arn
   roles      = [aws_iam_role.webappS3Role.name]
+}
+
+//Auto Scaling Config:
+resource "aws_launch_template" "launch-config" {
+  image_id      = var.ami
+  instance_type = "t2.micro"
+  # security_groups = [aws_security_group.load-balancer.id]
+  user_data = base64encode(<<-EOF
+  #!/bin/bash
+  echo DB_USERNAME='${aws_db_instance.rds_cloud_database.username}' >>  /home/ec2-user/webapp/.env
+  echo DB_DNAME='${aws_db_instance.rds_cloud_database.db_name}' >>  /home/ec2-user/webapp/.env
+  echo DB_PASSWORD='${aws_db_instance.rds_cloud_database.password}'>>  /home/ec2-user/webapp/.env
+  echo DB_HOSTNAME='${aws_db_instance.rds_cloud_database.address}'>>  /home/ec2-user/webapp/.env
+  echo S3_BUCKETNAME='${aws_s3_bucket.s3Bucket.bucket}'>>  /home/ec2-user/webapp/.env
+  echo S3_BUCKETREGION='${var.region}'>>  /home/ec2-user/webapp/.env
+EOF
+  )
+
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [aws_security_group.web_app_sg.id]
+  }
+
+  iam_instance_profile {
+    name = aws_iam_instance_profile.webapppofile.name
+  }
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+
+    ebs {
+      volume_size           = 50
+      delete_on_termination = true
+      volume_type           = "gp2"
+    }
+  }
+
+}
+
+
+#Auto scaling group:
+resource "aws_autoscaling_group" "asg" {
+  name                      = "csye6225-asg-spring2023"
+  max_size                  = 3
+  min_size                  = 1
+  health_check_grace_period = 300
+  health_check_type         = "EC2"
+  desired_capacity          = 1
+  force_delete              = true
+  vpc_zone_identifier       = [for subnet in aws_subnet.subnet : subnet.id]
+  default_cooldown          = 60
+
+  tag {
+    key                 = "Name"
+    value               = "Webapp - ${var.ami}"
+    propagate_at_launch = true
+  }
+
+  launch_template {
+    id      = aws_launch_template.launch-config.id
+    version = "$Latest"
+  }
+
+  target_group_arns = [
+    aws_lb_target_group.alb_tg.arn
+  ]
+
+}
+
+
+//Auto Scaling Policy:
+resource "aws_autoscaling_policy" "asg_up_policy" {
+  name                   = "csye6225-asg-up"
+  autoscaling_group_name = aws_autoscaling_group.asg.name
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 60
+  scaling_adjustment     = 1
+}
+
+resource "aws_cloudwatch_metric_alarm" "autoscaling_metric_up" {
+  alarm_name          = "auto-scaling-up-alarm"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 5
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.asg.name
+  }
+  alarm_actions = [aws_autoscaling_policy.asg_up_policy.arn]
+}
+
+resource "aws_autoscaling_policy" "asg_down_policy" {
+  name                   = "csye6225-asg-down"
+  autoscaling_group_name = aws_autoscaling_group.asg.name
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 60
+  scaling_adjustment     = -1
+}
+
+resource "aws_cloudwatch_metric_alarm" "autoscaling_metric_down" {
+  alarm_name          = "auto-scaling-down-alarm"
+  comparison_operator = "LessThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 3
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.asg.name
+  }
+  alarm_actions = [aws_autoscaling_policy.asg_down_policy.arn]
+}
+
+
+
+
+//Load Balancer:
+resource "aws_lb" "lb" {
+  name               = "csye6225-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.load-balancer.id]
+  subnets            = [for subnet in aws_subnet.subnet : subnet.id]
+  ip_address_type    = "ipv4"
+
+  tags = {
+    Application = "WebApp"
+  }
+}
+
+//Load Balancer Listener:
+resource "aws_lb_listener" "front_end" {
+  load_balancer_arn = aws_lb.lb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.alb_tg.arn
+  }
+}
+
+//Load Balancer Target Group:
+resource "aws_lb_target_group" "alb_tg" {
+  name        = "csye6225-lb-alb-tg"
+  target_type = "instance"
+  vpc_id      = aws_vpc.assignment_3_vpc.id
+  port        = 2000
+  protocol    = "HTTP"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 10
+    interval            = 30
+    path                = "/health"
+    matcher             = "200"
+    port                = "2000"
+    protocol            = "HTTP"
+  }
+}
+
+//Instance registration for target group:
+resource "aws_autoscaling_attachment" "webapp_attachment" {
+  autoscaling_group_name = aws_autoscaling_group.asg.name
+  lb_target_group_arn    = aws_lb_target_group.alb_tg.arn
 }

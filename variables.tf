@@ -12,6 +12,11 @@ variable "vpc_cidr" {
   default     = "10.0.0.0/16"
 }
 
+variable "ami" {
+  type    = string
+  default = "ami-0f82febabd544515a"
+}
+
 variable "subnets" {
   description = "A list of subnets to create in the VPC"
   type = list(object({
@@ -47,7 +52,7 @@ variable "rds_engine" {
 
 variable "bucketName" {
   description = "S3 Bucket name"
-  default = "s3-webapp"
+  default     = "s3-webapp"
 }
 
 # variable "rds_engine_version" {
