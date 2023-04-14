@@ -14,7 +14,7 @@ variable "vpc_cidr" {
 
 variable "ami" {
   type    = string
-  default = "ami-0f82febabd544515a"
+  default = "ami-0fa1de1d60de6a97e"
 }
 
 variable "subnets" {
@@ -54,6 +54,19 @@ variable "bucketName" {
   description = "S3 Bucket name"
   default     = "s3-webapp"
 }
+
+
+//Assignment - 9 Changes:
+
+variable "environment" {
+  description = "The environment where the infra will be deployed"
+  default     = "dev"
+}
+
+variable "certificate_arn" {
+  default = "arn:aws:acm:us-east-1:072975252406:certificate/ebfcaa2f-292f-489c-a2de-c4b3b6b071c1"
+}
+
 
 # variable "rds_engine_version" {
 #   description        = "RDS engine version"
