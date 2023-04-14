@@ -580,15 +580,14 @@ resource "aws_kms_key" "rds-kms-key" {
 
 
 //Caller Identity:
-data "aws_caller_identity" "active" {
+data "aws_caller_identity" "active" {}
 
-}
 resource "aws_lb_listener" "front_end_https" {
   load_balancer_arn = aws_lb.lb.arn
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-2016-08"
-  certificate_arn   = var.profile == "demo" ? "arn:aws:acm:us-east-1:146721225773:certificate/f6ea008f-8627-46f7-a71b-5dc30d2521c6" : "arn:aws:acm:us-east-1:072975252406:certificate/ebfcaa2f-292f-489c-a2de-c4b3b6b071c1"
+  certificate_arn   = var.profile == "demo" ?  "arn:aws:acm:us-east-1:146721225773:certificate/f6ea008f-8627-46f7-a71b-5dc30d2521c6" : "arn:aws:acm:us-east-1:072975252406:certificate/ebfcaa2f-292f-489c-a2de-c4b3b6b071c1"
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.alb_tg.arn

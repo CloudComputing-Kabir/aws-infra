@@ -4,7 +4,7 @@ variable "region" {
 }
 
 variable "profile" {
-  default = "dev"
+  default = "demo"
 }
 
 variable "vpc_cidr" {
@@ -14,7 +14,7 @@ variable "vpc_cidr" {
 
 variable "ami" {
   type    = string
-  default = "ami-0fa1de1d60de6a97e"
+  default = "ami-0731a869ecfb84c70" 
 }
 
 variable "subnets" {
