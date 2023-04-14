@@ -50,6 +50,8 @@ resource "aws_db_instance" "rds_cloud_database" {
   parameter_group_name   = aws_db_parameter_group.rds_parameter_group.name
   skip_final_snapshot    = true
   db_subnet_group_name   = aws_db_subnet_group.rdsSubnet.name
+  storage_encrypted      = true
+  kms_key_id             = aws_kms_key.rds-kms-key.arn
 
   tags = {
     "Name" = "RDS_DATABASE_FOR_CLOUD_ASSIGNMENT"
@@ -227,6 +229,7 @@ resource "aws_iam_policy_attachment" "AmazonSSMManagedInstanceCore_Policy" {
 resource "aws_launch_template" "launch-config" {
   image_id      = var.ami
   instance_type = "t2.micro"
+  name          = "launch-config"
   # security_groups = [aws_security_group.load-balancer.id]
   user_data = base64encode(<<-EOF
   #!/bin/bash
@@ -255,6 +258,8 @@ EOF
       volume_size           = 50
       delete_on_termination = true
       volume_type           = "gp2"
+      encrypted             = true
+      kms_key_id            = aws_kms_key.aws-infra-kms-key.arn
     }
   }
 
@@ -352,6 +357,7 @@ resource "aws_lb" "lb" {
   subnets            = [for subnet in aws_subnet.subnet : subnet.id]
   ip_address_type    = "ipv4"
 
+
   tags = {
     Application = "WebApp"
   }
@@ -360,9 +366,8 @@ resource "aws_lb" "lb" {
 //Load Balancer Listener:
 resource "aws_lb_listener" "front_end" {
   load_balancer_arn = aws_lb.lb.arn
-  port              = 80
-  protocol          = "HTTP"
-
+  port              = 80     //Cross check
+  protocol          = "HTTP" //Cross check
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.alb_tg.arn
@@ -395,3 +400,198 @@ resource "aws_autoscaling_attachment" "webapp_attachment" {
   autoscaling_group_name = aws_autoscaling_group.asg.name
   lb_target_group_arn    = aws_lb_target_group.alb_tg.arn
 }
+
+
+
+
+//KMS key for EBS encryption:
+resource "aws_kms_key" "aws-infra-kms-key" {
+  description              = "EC2 KMS Key"
+  deletion_window_in_days  = 7
+  customer_master_key_spec = "SYMMETRIC_DEFAULT"
+  policy = jsonencode(
+    {
+      "Id" : "key-consolepolicy-3",
+      "Version" : "2012-10-17",
+      "Statement" : [
+        {
+          "Sid" : "Enable IAM User Permissions",
+          "Effect" : "Allow",
+          "Principal" : {
+            "AWS" : "arn:aws:iam::${data.aws_caller_identity.active.account_id}:root"
+          },
+          "Action" : "kms:*",
+          "Resource" : "*"
+        },
+        {
+          "Sid" : "Allow access for Key Administrators",
+          "Effect" : "Allow",
+          "Principal" : {
+            "AWS" : [
+              "arn:aws:iam::${data.aws_caller_identity.active.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+            ]
+          },
+          "Action" : [
+            "kms:Create*",
+            "kms:Describe*",
+            "kms:Enable*",
+            "kms:List*",
+            "kms:Put*",
+            "kms:Update*",
+            "kms:Revoke*",
+            "kms:Disable*",
+            "kms:Get*",
+            "kms:Delete*",
+            "kms:TagResource",
+            "kms:UntagResource",
+            "kms:ScheduleKeyDeletion",
+            "kms:CancelKeyDeletion"
+          ],
+          "Resource" : "*"
+        },
+        {
+          "Sid" : "Allow use of the key",
+          "Effect" : "Allow",
+          "Principal" : {
+            "AWS" : [
+              "arn:aws:iam::${data.aws_caller_identity.active.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+            ]
+          },
+          "Action" : [
+            "kms:Encrypt",
+            "kms:Decrypt",
+            "kms:ReEncrypt*",
+            "kms:GenerateDataKey*",
+            "kms:DescribeKey"
+          ],
+          "Resource" : "*"
+        },
+        {
+          "Sid" : "Allow attachment of persistent resources",
+          "Effect" : "Allow",
+          "Principal" : {
+            "AWS" : [
+              "arn:aws:iam::${data.aws_caller_identity.active.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+            ]
+          },
+          "Action" : [
+            "kms:CreateGrant",
+            "kms:ListGrants",
+            "kms:RevokeGrant"
+          ],
+          "Resource" : "*",
+          "Condition" : {
+            "Bool" : {
+              "kms:GrantIsForAWSResource" : "true"
+            }
+          }
+        }
+      ]
+    }
+  )
+}
+
+//KMS key for the RDS encryption:
+resource "aws_kms_key" "rds-kms-key" {
+  description              = "RDS KMS Key"
+  deletion_window_in_days  = 7
+  customer_master_key_spec = "SYMMETRIC_DEFAULT"
+  policy = jsonencode(
+    {
+      "Id" : "key-consolepolicy-3",
+      "Version" : "2012-10-17",
+      "Statement" : [
+        {
+          "Sid" : "Enable IAM User Permissions",
+          "Effect" : "Allow",
+          "Principal" : {
+            "AWS" : "arn:aws:iam::${data.aws_caller_identity.active.account_id}:root"
+          },
+          "Action" : "kms:*",
+          "Resource" : "*"
+        },
+        {
+          "Sid" : "Allow access for Key Administrators",
+          "Effect" : "Allow",
+          "Principal" : {
+            "AWS" : [
+              "arn:aws:iam::${data.aws_caller_identity.active.account_id}:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS"
+            ]
+          },
+          "Action" : [
+            "kms:Create*",
+            "kms:Describe*",
+            "kms:Enable*",
+            "kms:List*",
+            "kms:Put*",
+            "kms:Update*",
+            "kms:Revoke*",
+            "kms:Disable*",
+            "kms:Get*",
+            "kms:Delete*",
+            "kms:TagResource",
+            "kms:UntagResource",
+            "kms:ScheduleKeyDeletion",
+            "kms:CancelKeyDeletion"
+          ],
+          "Resource" : "*"
+        },
+        {
+          "Sid" : "Allow use of the key",
+          "Effect" : "Allow",
+          "Principal" : {
+            "AWS" : [
+              "arn:aws:iam::${data.aws_caller_identity.active.account_id}:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS"
+            ]
+          },
+          "Action" : [
+            "kms:Encrypt",
+            "kms:Decrypt",
+            "kms:ReEncrypt*",
+            "kms:GenerateDataKey*",
+            "kms:DescribeKey"
+          ],
+          "Resource" : "*"
+        },
+        {
+          "Sid" : "Allow attachment of persistent resources",
+          "Effect" : "Allow",
+          "Principal" : {
+            "AWS" : [
+              "arn:aws:iam::${data.aws_caller_identity.active.account_id}:role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS"
+            ]
+          },
+          "Action" : [
+            "kms:CreateGrant",
+            "kms:ListGrants",
+            "kms:RevokeGrant"
+          ],
+          "Resource" : "*",
+          "Condition" : {
+            "Bool" : {
+              "kms:GrantIsForAWSResource" : "true"
+            }
+          }
+        }
+      ]
+    }
+  )
+}
+
+
+//Caller Identity:
+data "aws_caller_identity" "active" {
+
+}
+resource "aws_lb_listener" "front_end_https" {
+  load_balancer_arn = aws_lb.lb.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = var.profile == "demo" ? "arn:aws:acm:us-east-1:146721225773:certificate/f6ea008f-8627-46f7-a71b-5dc30d2521c6" : "arn:aws:acm:us-east-1:072975252406:certificate/ebfcaa2f-292f-489c-a2de-c4b3b6b071c1"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.alb_tg.arn
+  }
+}
+
