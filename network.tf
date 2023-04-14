@@ -12,19 +12,25 @@ resource "aws_security_group" "web_app_sg" {
   name        = "web_app_sg"
   description = "Allow HTTPS to web server"
   vpc_id      = aws_vpc.assignment_3_vpc.id
-
-  ingress = [
-    {
+  ingress {
       description      = "HTTPS ingress"
       from_port        = 22
       to_port          = 22
       protocol         = "tcp"
-      security_groups  = ["${aws_security_group.load-balancer.id}"]
+      # security_groups  = ["${aws_security_group.load-balancer.id}"]
       cidr_blocks      = ["0.0.0.0/0"]
+  }
+  ingress {
+    description     = "HTTPS ingress"
+      from_port       = 2000
+      to_port         = 2000
+      protocol        = "tcp"
+      security_groups = [aws_security_group.load-balancer.id]
+      # cidr_blocks      = ["0.0.0.0/0"]
       ipv6_cidr_blocks = []
       prefix_list_ids  = []
       self             = false
-    },
+  }
     # {
     #   description     = "HTTPS ingress"
     #   from_port       = 80
@@ -37,19 +43,6 @@ resource "aws_security_group" "web_app_sg" {
     #   security_groups  = []
     #   self             = false
     # },
-     {
-      description     = "HTTPS ingress"
-      from_port       = 2000
-      to_port         = 2000
-      protocol        = "tcp"
-      security_groups = ["${aws_security_group.load-balancer.id}"]
-      cidr_blocks      = ["0.0.0.0/0"]
-      ipv6_cidr_blocks = []
-      prefix_list_ids  = []
-      security_groups  = []
-      self             = false
-    },
-  ]
 
   egress {
     description      = "Outbound Traffic"

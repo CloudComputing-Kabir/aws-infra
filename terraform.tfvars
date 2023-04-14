@@ -1,5 +1,5 @@
 region   = "us-east-1"
-profile  = "dev"
+profile  = "demo"
 vpc_cidr = "10.0.0.0/16"
 subnets = [
   {
